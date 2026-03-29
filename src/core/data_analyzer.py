@@ -1,7 +1,9 @@
 import pandas as pd
 import numpy as np
-from typing import Optional, List, Dict, Tuple, Any
+from typing import Optional, List, Dict, Any
 from scipy import stats
+
+from ..exceptions import AnalysisError
 
 
 class DataAnalyzer:
@@ -179,15 +181,17 @@ class DataAnalyzer:
         return result
     
     def get_salary_distribution(self, salary_col: str = 'pre_tax_salary',
-                               bins: List[int] = None) -> pd.DataFrame:
+                               bins: List[float] = None,
+                               labels: List[str] = None) -> pd.DataFrame:
         if self.data is None or salary_col not in self.data.columns:
             return pd.DataFrame()
         
         if bins is None:
             bins = [0, 5000, 8000, 10000, 15000, 20000, 30000, 50000, 100000, float('inf')]
         
-        labels = ['5千以下', '5千-8千', '8千-1万', '1万-1.5万', 
-                 '1.5万-2万', '2万-3万', '3万-5万', '5万-10万', '10万以上']
+        if labels is None:
+            labels = ['5千以下', '5千-8千', '8千-1万', '1万-1.5万', 
+                     '1.5万-2万', '2万-3万', '3万-5万', '5万-10万', '10万以上']
         
         try:
             distribution = pd.cut(self.data[salary_col], bins=bins, labels=labels)
@@ -195,7 +199,7 @@ class DataAnalyzer:
             result.columns = ['薪资区间', '人数']
             result['占比'] = (result['人数'] / result['人数'].sum() * 100).round(2)
             return result
-        except:
+        except Exception:
             return pd.DataFrame()
     
     def get_top_bottom(self, column: str, n: int = 10, 

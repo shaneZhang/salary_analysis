@@ -1,15 +1,13 @@
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 import pandas as pd
 import numpy as np
 from typing import Optional, List, Dict, Tuple
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, colorchooser
 import platform
-import os
+
+from ..exceptions import VisualizationError
 
 
 if platform.system() == 'Darwin':
@@ -23,11 +21,8 @@ plt.rcParams['axes.unicode_minus'] = False
 
 
 class DataVisualizer:
-    def __init__(self, parent=None):
-        self.parent = parent
+    def __init__(self):
         self.figure = None
-        self.canvas = None
-        self.toolbar = None
         self.current_chart_type = None
         self.data = None
         self.chart_config = {
@@ -43,6 +38,10 @@ class DataVisualizer:
     
     def set_data(self, data: pd.DataFrame):
         self.data = data
+    
+    def set_config(self, config: Dict):
+        if config:
+            self.chart_config.update(config)
     
     def create_figure(self, figsize: Tuple[float, float] = None, dpi: int = None):
         if figsize is None:
@@ -66,7 +65,7 @@ class DataVisualizer:
                         title: str = '', xlabel: str = '', ylabel: str = '',
                         labels: Optional[List[str]] = None,
                         color: Optional[str] = None,
-                        horizontal: bool = False) -> plt.Figure:
+                        horizontal: bool = False) -> Figure:
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -80,11 +79,11 @@ class DataVisualizer:
         
         if labels:
             for bar, label in zip(bars, labels):
-                height = bar.get_height()
                 if horizontal:
                     ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2,
                            f'{label}', va='center', fontsize=self.chart_config['tick_fontsize'])
                 else:
+                    height = bar.get_height()
                     ax.text(bar.get_x() + bar.get_width()/2, height,
                            f'{label}', ha='center', va='bottom', fontsize=self.chart_config['tick_fontsize'])
         
@@ -104,7 +103,7 @@ class DataVisualizer:
                          title: str = '', xlabel: str = '', ylabel: str = '',
                          labels: Optional[List[str]] = None,
                          colors: Optional[List[str]] = None,
-                         marker: str = 'o') -> plt.Figure:
+                         marker: str = 'o') -> Figure:
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -134,7 +133,7 @@ class DataVisualizer:
                         title: str = '',
                         colors: Optional[List[str]] = None,
                         explode: Optional[List[float]] = None,
-                        autopct: str = '%1.1f%%') -> plt.Figure:
+                        autopct: str = '%1.1f%%') -> Figure:
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -159,7 +158,7 @@ class DataVisualizer:
                             title: str = '', xlabel: str = '', ylabel: str = '',
                             color: Optional[str] = None,
                             size: float = 50,
-                            alpha: float = 0.6) -> plt.Figure:
+                            alpha: float = 0.6) -> Figure:
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -184,7 +183,7 @@ class DataVisualizer:
         return self.figure
     
     def create_boxplot(self, data_dict: Dict[str, List],
-                      title: str = '', xlabel: str = '', ylabel: str = '') -> plt.Figure:
+                      title: str = '', xlabel: str = '', ylabel: str = '') -> Figure:
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -214,7 +213,7 @@ class DataVisualizer:
     def create_histogram(self, data: List, bins: int = 30,
                         title: str = '', xlabel: str = '', ylabel: str = 'Frequency',
                         color: Optional[str] = None,
-                        kde: bool = False) -> plt.Figure:
+                        kde: bool = False) -> Figure:
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -245,7 +244,7 @@ class DataVisualizer:
     def create_heatmap(self, data: pd.DataFrame,
                        title: str = '',
                        cmap: str = 'YlOrRd',
-                       annot: bool = True) -> plt.Figure:
+                       annot: bool = True) -> Figure:
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -271,7 +270,7 @@ class DataVisualizer:
         return self.figure
     
     def create_stacked_bar(self, x_data: List, data_dict: Dict[str, List],
-                          title: str = '', xlabel: str = '', ylabel: str = '') -> plt.Figure:
+                          title: str = '', xlabel: str = '', ylabel: str = '') -> Figure:
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -294,7 +293,7 @@ class DataVisualizer:
         return self.figure
     
     def create_radar_chart(self, categories: List[str], values: List[float],
-                          title: str = '', color: Optional[str] = None) -> plt.Figure:
+                          title: str = '', color: Optional[str] = None) -> Figure:
         self.clear_figure()
         ax = self.figure.add_subplot(111, polar=True)
         
@@ -318,7 +317,7 @@ class DataVisualizer:
     
     def create_salary_distribution_chart(self, df: pd.DataFrame, 
                                          salary_col: str = 'pre_tax_salary',
-                                         group_col: Optional[str] = None) -> plt.Figure:
+                                         group_col: Optional[str] = None) -> Figure:
         self.clear_figure()
         
         if group_col and group_col in df.columns:
@@ -350,7 +349,7 @@ class DataVisualizer:
     def create_comparison_chart(self, df: pd.DataFrame, 
                                dimension_col: str,
                                salary_col: str = 'pre_tax_salary',
-                               chart_type: str = 'bar') -> plt.Figure:
+                               chart_type: str = 'bar') -> Figure:
         grouped = df.groupby(dimension_col)[salary_col].mean().sort_values(ascending=False)
         
         if chart_type == 'bar':
@@ -377,7 +376,7 @@ class DataVisualizer:
     
     def create_trend_chart(self, df: pd.DataFrame,
                           time_col: str,
-                          salary_col: str = 'pre_tax_salary') -> plt.Figure:
+                          salary_col: str = 'pre_tax_salary') -> Figure:
         trend = df.groupby(time_col)[salary_col].agg(['mean', 'median', 'count']).reset_index()
         
         x_data = trend[time_col].tolist()
@@ -393,32 +392,17 @@ class DataVisualizer:
             labels=['平均薪资', '中位薪资']
         )
     
-    def embed_in_tkinter(self, parent, figsize: Tuple[float, float] = None):
-        if self.figure is None:
-            self.create_figure(figsize)
-        
-        if self.canvas:
-            self.canvas.get_tk_widget().destroy()
-        if self.toolbar:
-            self.toolbar.destroy()
-        
-        self.canvas = FigureCanvasTkAgg(self.figure, master=parent)
-        self.canvas.draw()
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        
-        self.toolbar = NavigationToolbar2Tk(self.canvas, parent)
-        self.toolbar.update()
-        
-        return self.canvas
-    
-    def save_chart(self, output_path: str, dpi: int = 300, format: str = 'png'):
+    def save_chart(self, output_path: str, dpi: int = 300, format: str = 'png') -> bool:
         if self.figure:
-            self.figure.savefig(output_path, dpi=dpi, format=format, 
-                             bbox_inches='tight', facecolor='white')
-            return True
+            try:
+                self.figure.savefig(output_path, dpi=dpi, format=format, 
+                                 bbox_inches='tight', facecolor='white')
+                return True
+            except Exception as e:
+                raise VisualizationError(f"保存图表失败: {str(e)}")
         return False
     
-    def get_current_figure(self) -> Optional[plt.Figure]:
+    def get_current_figure(self) -> Optional[Figure]:
         return self.figure
     
     def set_figure_size(self, width: float, height: float):
