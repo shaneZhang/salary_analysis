@@ -20,6 +20,7 @@ def main():
     controller = MainController()
     view = MainView(root, controller)
     controller.set_view(view, root)
+    controller.run()
     
     root.mainloop()
 
