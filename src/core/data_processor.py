@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
 from typing import Optional, List, Dict, Any, Callable
-import tkinter as tk
-from tkinter import messagebox
+
+from ..exceptions import DataProcessingError
 
 
 class DataProcessor:
@@ -134,8 +134,7 @@ class DataProcessor:
                 self.data[column] = self.data[column].astype('category')
             return True
         except Exception as e:
-            messagebox.showerror('错误', f'类型转换失败: {str(e)}')
-            return False
+            raise DataProcessingError(f"类型转换失败: {str(e)}")
     
     def create_calculated_field(self, field_name: str, 
                                calculation: Callable[[pd.DataFrame], pd.Series]) -> bool:
@@ -146,8 +145,7 @@ class DataProcessor:
             self.data[field_name] = calculation(self.data)
             return True
         except Exception as e:
-            messagebox.showerror('错误', f'计算字段创建失败: {str(e)}')
-            return False
+            raise DataProcessingError(f"计算字段创建失败: {str(e)}")
     
     def calculate_age_from_year(self, birth_year_column: str, 
                                 reference_year: Optional[int] = None) -> bool:
@@ -161,65 +159,73 @@ class DataProcessor:
             self.data['age'] = reference_year - pd.to_numeric(self.data[birth_year_column], errors='coerce')
             return True
         except Exception as e:
-            messagebox.showerror('错误', f'年龄计算失败: {str(e)}')
-            return False
+            raise DataProcessingError(f"年龄计算失败: {str(e)}")
     
     def create_age_group(self, age_column: str = 'age', 
-                        bins: Optional[List[int]] = None) -> bool:
+                        bins: Optional[List[int]] = None,
+                        labels: Optional[List[str]] = None) -> bool:
         if self.data is None or age_column not in self.data.columns:
             return False
         
         if bins is None:
             bins = [0, 25, 30, 35, 40, 50, 60, 100]
         
-        try:
+        if labels is None:
             labels = ['25岁以下', '25-30岁', '30-35岁', '35-40岁', 
                      '40-50岁', '50-60岁', '60岁以上']
+        
+        try:
             self.data['age_group'] = pd.cut(self.data[age_column], 
                                            bins=bins, 
                                            labels=labels,
                                            right=False)
             return True
         except Exception as e:
-            messagebox.showerror('错误', f'年龄分组失败: {str(e)}')
-            return False
+            raise DataProcessingError(f"年龄分组失败: {str(e)}")
     
     def create_salary_group(self, salary_column: str = 'pre_tax_salary',
-                          bins: Optional[List[int]] = None) -> bool:
+                          bins: Optional[List[float]] = None,
+                          labels: Optional[List[str]] = None) -> bool:
         if self.data is None or salary_column not in self.data.columns:
             return False
         
         if bins is None:
             bins = [0, 5000, 10000, 15000, 20000, 30000, 50000, float('inf')]
         
-        try:
+        if labels is None:
             labels = ['5千以下', '5千-1万', '1万-1.5万', '1.5万-2万', 
                      '2万-3万', '3万-5万', '5万以上']
+        
+        try:
             self.data['salary_group'] = pd.cut(self.data[salary_column],
                                                bins=bins,
                                                labels=labels,
                                                right=False)
             return True
         except Exception as e:
-            messagebox.showerror('错误', f'薪资分组失败: {str(e)}')
-            return False
+            raise DataProcessingError(f"薪资分组失败: {str(e)}")
     
-    def create_work_experience_group(self, years_column: str = 'work_years') -> bool:
+    def create_work_experience_group(self, years_column: str = 'work_years',
+                                     bins: Optional[List[float]] = None,
+                                     labels: Optional[List[str]] = None) -> bool:
         if self.data is None or years_column not in self.data.columns:
             return False
         
-        try:
+        if bins is None:
             bins = [0, 1, 3, 5, 10, 15, 20, float('inf')]
+        
+        if labels is None:
             labels = ['1年以下', '1-3年', '3-5年', '5-10年', 
                      '10-15年', '15-20年', '20年以上']
+        
+        try:
             self.data['experience_group'] = pd.cut(pd.to_numeric(self.data[years_column], errors='coerce'),
                                                     bins=bins,
                                                     labels=labels,
                                                     right=False)
             return True
         except Exception as e:
-            messagebox.showerror('错误', f'工作年限分组失败: {str(e)}')
-            return False
+            raise DataProcessingError(f"工作年限分组失败: {str(e)}")
     
     def filter_data(self, conditions: Dict[str, Any]) -> pd.DataFrame:
         if self.data is None:
@@ -271,7 +277,7 @@ class DataProcessor:
                     dummies = pd.get_dummies(self.data[col], prefix=col)
                     self.data = pd.concat([self.data, dummies], axis=1)
                     result[col] = True
-            except Exception as e:
+            except Exception:
                 result[col] = False
         
         return result
