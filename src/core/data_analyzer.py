@@ -1,17 +1,38 @@
+"""
+数据分析模块（重构版）
+移除GUI依赖，改为纯业务逻辑
+"""
+
 import pandas as pd
 import numpy as np
-from typing import Optional, List, Dict, Tuple, Any
+from typing import Optional, List, Dict, Any
 from scipy import stats
+from ..models.logger import LoggerMixin
 
 
-class DataAnalyzer:
+class DataAnalyzer(LoggerMixin):
+    """
+    数据分析器
+    负责各种统计分析功能
+    """
+    
     def __init__(self, data: Optional[pd.DataFrame] = None):
         self.data = data
     
-    def set_data(self, data: pd.DataFrame):
+    def set_data(self, data: pd.DataFrame) -> None:
+        """设置数据"""
         self.data = data
     
     def get_descriptive_stats(self, column: str) -> Dict[str, float]:
+        """
+        获取描述性统计
+        
+        Args:
+            column: 列名
+            
+        Returns:
+            统计指标字典
+        """
         if self.data is None or column not in self.data.columns:
             return {}
         
@@ -43,6 +64,16 @@ class DataAnalyzer:
         return stats_dict
     
     def get_grouped_stats(self, group_by: str, value_col: str) -> pd.DataFrame:
+        """
+        获取分组统计
+        
+        Args:
+            group_by: 分组列
+            value_col: 数值列
+            
+        Returns:
+            分组统计结果
+        """
         if self.data is None or group_by not in self.data.columns or value_col not in self.data.columns:
             return pd.DataFrame()
         
@@ -59,6 +90,15 @@ class DataAnalyzer:
         return grouped
     
     def get_frequency_analysis(self, column: str) -> pd.DataFrame:
+        """
+        频率分析
+        
+        Args:
+            column: 列名
+            
+        Returns:
+            频率统计结果
+        """
         if self.data is None or column not in self.data.columns:
             return pd.DataFrame()
         
@@ -71,6 +111,17 @@ class DataAnalyzer:
     
     def get_crosstab(self, row_col: str, col_col: str, 
                      normalize: bool = False) -> pd.DataFrame:
+        """
+        交叉分析
+        
+        Args:
+            row_col: 行列
+            col_col: 列列
+            normalize: 是否标准化
+            
+        Returns:
+            交叉表
+        """
         if self.data is None:
             return pd.DataFrame()
         
@@ -82,6 +133,16 @@ class DataAnalyzer:
         return crosstab
     
     def compare_by_dimension(self, dimension: str, value_col: str = 'pre_tax_salary') -> pd.DataFrame:
+        """
+        按维度对比分析
+        
+        Args:
+            dimension: 维度列
+            value_col: 数值列
+            
+        Returns:
+            对比分析结果
+        """
         if self.data is None or dimension not in self.data.columns:
             return pd.DataFrame()
         
@@ -101,6 +162,15 @@ class DataAnalyzer:
         return comparison
     
     def get_correlation_matrix(self, columns: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        获取相关系数矩阵
+        
+        Args:
+            columns: 列名列表
+            
+        Returns:
+            相关系数矩阵
+        """
         if self.data is None:
             return pd.DataFrame()
         
@@ -114,6 +184,16 @@ class DataAnalyzer:
         return corr_matrix
     
     def get_correlation(self, col1: str, col2: str) -> Dict[str, float]:
+        """
+        获取两列的相关性
+        
+        Args:
+            col1: 第一列
+            col2: 第二列
+            
+        Returns:
+            相关性指标
+        """
         if self.data is None:
             return {}
         
@@ -140,6 +220,16 @@ class DataAnalyzer:
         }
     
     def get_trend_analysis(self, time_col: str, value_col: str) -> pd.DataFrame:
+        """
+        趋势分析
+        
+        Args:
+            time_col: 时间列
+            value_col: 数值列
+            
+        Returns:
+            趋势分析结果
+        """
         if self.data is None or time_col not in self.data.columns:
             return pd.DataFrame()
         
@@ -164,6 +254,16 @@ class DataAnalyzer:
     
     def get_percentile_distribution(self, column: str, 
                                    percentiles: List[float] = None) -> Dict[str, float]:
+        """
+        获取百分位分布
+        
+        Args:
+            column: 列名
+            percentiles: 百分位列表
+            
+        Returns:
+            百分位分布
+        """
         if self.data is None or column not in self.data.columns:
             return {}
         
@@ -179,7 +279,17 @@ class DataAnalyzer:
         return result
     
     def get_salary_distribution(self, salary_col: str = 'pre_tax_salary',
-                               bins: List[int] = None) -> pd.DataFrame:
+                               bins: List[float] = None) -> pd.DataFrame:
+        """
+        薪资分布分析
+        
+        Args:
+            salary_col: 薪资列
+            bins: 分组区间
+            
+        Returns:
+            薪资分布结果
+        """
         if self.data is None or salary_col not in self.data.columns:
             return pd.DataFrame()
         
@@ -195,11 +305,22 @@ class DataAnalyzer:
             result.columns = ['薪资区间', '人数']
             result['占比'] = (result['人数'] / result['人数'].sum() * 100).round(2)
             return result
-        except:
+        except Exception:
             return pd.DataFrame()
     
     def get_top_bottom(self, column: str, n: int = 10, 
                       top: bool = True) -> pd.DataFrame:
+        """
+        获取最大/最小的N条记录
+        
+        Args:
+            column: 列名
+            n: 数量
+            top: True获取最大，False获取最小
+            
+        Returns:
+            结果数据框
+        """
         if self.data is None or column not in self.data.columns:
             return pd.DataFrame()
         
@@ -211,6 +332,15 @@ class DataAnalyzer:
         return result
     
     def get_summary_report(self, salary_col: str = 'pre_tax_salary') -> Dict[str, Any]:
+        """
+        获取摘要报告
+        
+        Args:
+            salary_col: 薪资列
+            
+        Returns:
+            摘要报告
+        """
         if self.data is None or salary_col not in self.data.columns:
             return {}
         
@@ -236,6 +366,16 @@ class DataAnalyzer:
     
     def get_dimensions_analysis(self, dimensions: List[str], 
                                salary_col: str = 'pre_tax_salary') -> Dict[str, pd.DataFrame]:
+        """
+        多维度分析
+        
+        Args:
+            dimensions: 维度列表
+            salary_col: 薪资列
+            
+        Returns:
+            各维度分析结果
+        """
         if self.data is None:
             return {}
         
@@ -247,15 +387,17 @@ class DataAnalyzer:
         
         return results
     
-    def calculate_growth_rate(self, time_col: str, value_col: str) -> pd.DataFrame:
-        if self.data is None or time_col not in self.data.columns:
-            return pd.DataFrame()
-        
-        trend = self.get_trend_analysis(time_col, value_col)
-        
-        return trend
-    
     def get_boxplot_data(self, group_by: str, value_col: str) -> Dict[str, Dict]:
+        """
+        获取箱线图数据
+        
+        Args:
+            group_by: 分组列
+            value_col: 数值列
+            
+        Returns:
+            箱线图数据
+        """
         if self.data is None or group_by not in self.data.columns:
             return {}
         
@@ -278,4 +420,5 @@ class DataAnalyzer:
         return result
     
     def get_current_data(self) -> Optional[pd.DataFrame]:
+        """获取当前数据"""
         return self.data

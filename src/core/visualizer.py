@@ -1,15 +1,18 @@
+"""
+数据可视化模块（重构版）
+移除GUI依赖，改为纯业务逻辑
+"""
+
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 import pandas as pd
 import numpy as np
-from typing import Optional, List, Dict, Tuple
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, colorchooser
+from typing import Optional, List, Dict, Tuple, Any
 import platform
-import os
+from ..exceptions import VisualizationException
+from ..models.logger import LoggerMixin
 
 
 if platform.system() == 'Darwin':
@@ -22,15 +25,18 @@ else:
 plt.rcParams['axes.unicode_minus'] = False
 
 
-class DataVisualizer:
-    def __init__(self, parent=None):
-        self.parent = parent
-        self.figure = None
-        self.canvas = None
-        self.toolbar = None
-        self.current_chart_type = None
-        self.data = None
-        self.chart_config = {
+class DataVisualizer(LoggerMixin):
+    """
+    数据可视化器
+    负责生成各种图表
+    """
+    
+    def __init__(self, chart_config: Optional[Dict[str, Any]] = None):
+        self.figure: Optional[Figure] = None
+        self.current_chart_type: Optional[str] = None
+        self.data: Optional[pd.DataFrame] = None
+        
+        default_config = {
             'figure_size': (10, 6),
             'dpi': 100,
             'title_fontsize': 14,
@@ -40,11 +46,23 @@ class DataVisualizer:
             'colors': ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', 
                       '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
         }
+        
+        self.chart_config = default_config
+        if chart_config:
+            if 'figure_size' in chart_config and isinstance(chart_config['figure_size'], list):
+                chart_config['figure_size'] = tuple(chart_config['figure_size'])
+            self.chart_config.update(chart_config)
     
-    def set_data(self, data: pd.DataFrame):
+    def set_data(self, data: pd.DataFrame) -> None:
+        """设置数据"""
         self.data = data
     
-    def create_figure(self, figsize: Tuple[float, float] = None, dpi: int = None):
+    def set_config(self, config: Dict[str, Any]) -> None:
+        """设置图表配置"""
+        self.chart_config.update(config)
+    
+    def create_figure(self, figsize: Tuple[float, float] = None, dpi: int = None) -> Figure:
+        """创建图形"""
         if figsize is None:
             figsize = self.chart_config['figure_size']
         if dpi is None:
@@ -53,20 +71,19 @@ class DataVisualizer:
         self.figure = Figure(figsize=figsize, dpi=dpi)
         return self.figure
     
-    def clear_figure(self):
+    def clear_figure(self) -> None:
+        """清除图形"""
         if self.figure is None:
             self.create_figure()
         else:
             self.figure.clf()
     
-    def set_color_scheme(self, colors: List[str]):
-        self.chart_config['colors'] = colors
-    
     def create_bar_chart(self, x_data: List, y_data: List, 
                         title: str = '', xlabel: str = '', ylabel: str = '',
                         labels: Optional[List[str]] = None,
                         color: Optional[str] = None,
-                        horizontal: bool = False) -> plt.Figure:
+                        horizontal: bool = False) -> Figure:
+        """创建柱状图"""
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -80,11 +97,11 @@ class DataVisualizer:
         
         if labels:
             for bar, label in zip(bars, labels):
-                height = bar.get_height()
                 if horizontal:
                     ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2,
                            f'{label}', va='center', fontsize=self.chart_config['tick_fontsize'])
                 else:
+                    height = bar.get_height()
                     ax.text(bar.get_x() + bar.get_width()/2, height,
                            f'{label}', ha='center', va='bottom', fontsize=self.chart_config['tick_fontsize'])
         
@@ -98,13 +115,15 @@ class DataVisualizer:
             ax.invert_yaxis()
         
         self.figure.tight_layout()
+        self.current_chart_type = 'bar'
         return self.figure
     
-    def create_line_chart(self, x_data: List, y_data_list: List[List],
+    def create_line_chart(self, x_data: List, y_data_list: List[List[float]],
                          title: str = '', xlabel: str = '', ylabel: str = '',
                          labels: Optional[List[str]] = None,
                          colors: Optional[List[str]] = None,
-                         marker: str = 'o') -> plt.Figure:
+                         marker: str = 'o') -> Figure:
+        """创建折线图"""
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -128,13 +147,15 @@ class DataVisualizer:
         ax.grid(True, linestyle='--', alpha=0.7)
         
         self.figure.tight_layout()
+        self.current_chart_type = 'line'
         return self.figure
     
     def create_pie_chart(self, data: List, labels: List[str],
                         title: str = '',
                         colors: Optional[List[str]] = None,
                         explode: Optional[List[float]] = None,
-                        autopct: str = '%1.1f%%') -> plt.Figure:
+                        autopct: str = '%1.1f%%') -> Figure:
+        """创建饼图"""
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -153,13 +174,15 @@ class DataVisualizer:
         ax.set_title(title, fontsize=self.chart_config['title_fontsize'], pad=10)
         
         self.figure.tight_layout()
+        self.current_chart_type = 'pie'
         return self.figure
     
     def create_scatter_chart(self, x_data: List, y_data: List,
                             title: str = '', xlabel: str = '', ylabel: str = '',
                             color: Optional[str] = None,
                             size: float = 50,
-                            alpha: float = 0.6) -> plt.Figure:
+                            alpha: float = 0.6) -> Figure:
+        """创建散点图"""
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -181,10 +204,12 @@ class DataVisualizer:
         ax.grid(True, linestyle='--', alpha=0.7)
         
         self.figure.tight_layout()
+        self.current_chart_type = 'scatter'
         return self.figure
     
     def create_boxplot(self, data_dict: Dict[str, List],
-                      title: str = '', xlabel: str = '', ylabel: str = '') -> plt.Figure:
+                      title: str = '', xlabel: str = '', ylabel: str = '') -> Figure:
+        """创建箱线图"""
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -209,12 +234,14 @@ class DataVisualizer:
         ax.grid(True, linestyle='--', alpha=0.7, axis='y')
         
         self.figure.tight_layout()
+        self.current_chart_type = 'boxplot'
         return self.figure
     
     def create_histogram(self, data: List, bins: int = 30,
                         title: str = '', xlabel: str = '', ylabel: str = 'Frequency',
                         color: Optional[str] = None,
-                        kde: bool = False) -> plt.Figure:
+                        kde: bool = False) -> Figure:
+        """创建直方图"""
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -240,12 +267,14 @@ class DataVisualizer:
         ax.tick_params(axis='both', labelsize=self.chart_config['tick_fontsize'])
         
         self.figure.tight_layout()
+        self.current_chart_type = 'histogram'
         return self.figure
     
     def create_heatmap(self, data: pd.DataFrame,
                        title: str = '',
                        cmap: str = 'YlOrRd',
-                       annot: bool = True) -> plt.Figure:
+                       annot: bool = True) -> Figure:
+        """创建热力图"""
         self.clear_figure()
         ax = self.figure.add_subplot(111)
         
@@ -268,57 +297,13 @@ class DataVisualizer:
         cbar.ax.tick_params(labelsize=self.chart_config['tick_fontsize'])
         
         self.figure.tight_layout()
-        return self.figure
-    
-    def create_stacked_bar(self, x_data: List, data_dict: Dict[str, List],
-                          title: str = '', xlabel: str = '', ylabel: str = '') -> plt.Figure:
-        self.clear_figure()
-        ax = self.figure.add_subplot(111)
-        
-        bottom = np.zeros(len(x_data))
-        
-        for i, (key, values) in enumerate(data_dict.items()):
-            ax.bar(x_data, values, label=key, bottom=bottom, 
-                  color=self.chart_config['colors'][i % len(self.chart_config['colors'])],
-                  edgecolor='white')
-            bottom += values
-        
-        ax.set_title(title, fontsize=self.chart_config['title_fontsize'], pad=10)
-        ax.set_xlabel(xlabel, fontsize=self.chart_config['label_fontsize'])
-        ax.set_ylabel(ylabel, fontsize=self.chart_config['label_fontsize'])
-        
-        ax.tick_params(axis='both', labelsize=self.chart_config['tick_fontsize'])
-        ax.legend(fontsize=self.chart_config['legend_fontsize'], loc='best')
-        
-        self.figure.tight_layout()
-        return self.figure
-    
-    def create_radar_chart(self, categories: List[str], values: List[float],
-                          title: str = '', color: Optional[str] = None) -> plt.Figure:
-        self.clear_figure()
-        ax = self.figure.add_subplot(111, polar=True)
-        
-        if color is None:
-            color = self.chart_config['colors'][0]
-        
-        angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-        values_plot = values + [values[0]]
-        angles += angles[:1]
-        
-        ax.plot(angles, values_plot, 'o-', linewidth=2, color=color)
-        ax.fill(angles, values_plot, alpha=0.25, color=color)
-        
-        ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(categories, fontsize=self.chart_config['tick_fontsize'])
-        
-        ax.set_title(title, fontsize=self.chart_config['title_fontsize'], pad=20)
-        
-        self.figure.tight_layout()
+        self.current_chart_type = 'heatmap'
         return self.figure
     
     def create_salary_distribution_chart(self, df: pd.DataFrame, 
                                          salary_col: str = 'pre_tax_salary',
-                                         group_col: Optional[str] = None) -> plt.Figure:
+                                         group_col: Optional[str] = None) -> Figure:
+        """创建薪资分布图"""
         self.clear_figure()
         
         if group_col and group_col in df.columns:
@@ -340,17 +325,18 @@ class DataVisualizer:
             ax.grid(True, linestyle='--', alpha=0.7, axis='y')
         else:
             salary_data = df[salary_col].dropna().values
-            self.create_histogram(salary_data, bins=20, 
-                                title='薪资分布直方图', xlabel='薪资')
-            return self.figure
+            return self.create_histogram(salary_data, bins=20, 
+                                        title='薪资分布直方图', xlabel='薪资')
         
         self.figure.tight_layout()
+        self.current_chart_type = 'salary_distribution'
         return self.figure
     
     def create_comparison_chart(self, df: pd.DataFrame, 
                                dimension_col: str,
                                salary_col: str = 'pre_tax_salary',
-                               chart_type: str = 'bar') -> plt.Figure:
+                               chart_type: str = 'bar') -> Figure:
+        """创建对比图"""
         grouped = df.groupby(dimension_col)[salary_col].mean().sort_values(ascending=False)
         
         if chart_type == 'bar':
@@ -377,7 +363,8 @@ class DataVisualizer:
     
     def create_trend_chart(self, df: pd.DataFrame,
                           time_col: str,
-                          salary_col: str = 'pre_tax_salary') -> plt.Figure:
+                          salary_col: str = 'pre_tax_salary') -> Figure:
+        """创建趋势图"""
         trend = df.groupby(time_col)[salary_col].agg(['mean', 'median', 'count']).reset_index()
         
         x_data = trend[time_col].tolist()
@@ -387,42 +374,47 @@ class DataVisualizer:
         return self.create_line_chart(
             x_data=x_data,
             y_data_list=[y_mean, y_median],
-            title=f'薪资趋势变化',
+            title='薪资趋势变化',
             xlabel=time_col,
             ylabel='薪资',
             labels=['平均薪资', '中位薪资']
         )
     
-    def embed_in_tkinter(self, parent, figsize: Tuple[float, float] = None):
+    def save_chart(self, output_path: str, dpi: int = 300, format: str = 'png') -> bool:
+        """
+        保存图表
+        
+        Args:
+            output_path: 输出路径
+            dpi: 分辨率
+            format: 格式
+            
+        Returns:
+            是否成功
+        """
         if self.figure is None:
-            self.create_figure(figsize)
+            raise VisualizationException("没有可保存的图表")
         
-        if self.canvas:
-            self.canvas.get_tk_widget().destroy()
-        if self.toolbar:
-            self.toolbar.destroy()
-        
-        self.canvas = FigureCanvasTkAgg(self.figure, master=parent)
-        self.canvas.draw()
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        
-        self.toolbar = NavigationToolbar2Tk(self.canvas, parent)
-        self.toolbar.update()
-        
-        return self.canvas
-    
-    def save_chart(self, output_path: str, dpi: int = 300, format: str = 'png'):
-        if self.figure:
+        try:
             self.figure.savefig(output_path, dpi=dpi, format=format, 
                              bbox_inches='tight', facecolor='white')
+            self.logger.info(f"Chart saved to: {output_path}")
             return True
-        return False
+        except Exception as e:
+            raise VisualizationException(f"保存图表失败: {str(e)}")
     
-    def get_current_figure(self) -> Optional[plt.Figure]:
+    def get_current_figure(self) -> Optional[Figure]:
+        """获取当前图形"""
         return self.figure
     
-    def set_figure_size(self, width: float, height: float):
+    def set_figure_size(self, width: float, height: float) -> None:
+        """设置图形大小"""
         self.chart_config['figure_size'] = (width, height)
     
-    def set_dpi(self, dpi: int):
+    def set_dpi(self, dpi: int) -> None:
+        """设置DPI"""
         self.chart_config['dpi'] = dpi
+    
+    def set_color_scheme(self, colors: List[str]) -> None:
+        """设置颜色方案"""
+        self.chart_config['colors'] = colors

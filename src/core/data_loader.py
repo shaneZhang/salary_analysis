@@ -1,17 +1,27 @@
+"""
+数据加载模块（重构版）
+移除GUI依赖，改为纯业务逻辑
+"""
+
 import pandas as pd
 import os
 from typing import Optional, List, Dict, Tuple
-import tkinter as tk
-from tkinter import filedialog, messagebox
+from ..exceptions import DataLoadError, DataValidationError
+from ..models.logger import LoggerMixin
 
 
-class DataLoader:
-    def __init__(self):
+class DataLoader(LoggerMixin):
+    """
+    数据加载器
+    负责从各种来源加载数据
+    """
+    
+    def __init__(self, field_mapping: Optional[Dict[str, str]] = None):
         self.data: Optional[pd.DataFrame] = None
         self.file_path: Optional[str] = None
         self.sheet_names: List[str] = []
         
-        self.field_mapping = {
+        self.field_mapping = field_mapping or {
             '姓名': 'name',
             '性别': 'gender',
             '年龄': 'age',
@@ -29,40 +39,20 @@ class DataLoader:
             '入职年份': 'join_year'
         }
     
-    def select_file(self) -> Optional[str]:
-        root = tk.Tk()
-        root.withdraw()
+    def load_excel(self, file_path: str, sheet_name: Optional[str] = None) -> pd.DataFrame:
+        """
+        加载Excel文件
         
-        file_path = filedialog.askopenfilename(
-            title='选择Excel文件',
-            filetypes=[('Excel文件', '*.xlsx *.xls'), ('所有文件', '*.*')]
-        )
-        
-        if file_path:
-            self.file_path = file_path
-            return file_path
-        return None
-    
-    def select_folder(self) -> Optional[str]:
-        root = tk.Tk()
-        root.withdraw()
-        
-        folder_path = filedialog.askdirectory(title='选择文件夹')
-        
-        if folder_path:
-            return folder_path
-        return None
-    
-    def get_sheet_names(self, file_path: str) -> List[str]:
-        try:
-            xl_file = pd.ExcelFile(file_path)
-            self.sheet_names = xl_file.sheet_names
-            return self.sheet_names
-        except Exception as e:
-            messagebox.showerror('错误', f'读取工作表失败: {str(e)}')
-            return []
-    
-    def load_excel(self, file_path: str, sheet_name: Optional[str] = None) -> Optional[pd.DataFrame]:
+        Args:
+            file_path: 文件路径
+            sheet_name: 工作表名称
+            
+        Returns:
+            加载的数据框
+            
+        Raises:
+            DataLoadError: 加载失败时抛出
+        """
         try:
             if sheet_name:
                 self.data = pd.read_excel(file_path, sheet_name=sheet_name)
@@ -71,13 +61,22 @@ class DataLoader:
             
             self.file_path = file_path
             self._auto_map_fields()
+            self.logger.info(f"Loaded Excel file: {file_path}, rows: {len(self.data)}")
             return self.data
             
         except Exception as e:
-            messagebox.showerror('错误', f'读取Excel文件失败: {str(e)}')
-            return None
+            raise DataLoadError(f"读取Excel文件失败: {str(e)}", details=file_path) from e
     
-    def load_multiple_files(self, file_paths: List[str]) -> Optional[pd.DataFrame]:
+    def load_multiple_files(self, file_paths: List[str]) -> pd.DataFrame:
+        """
+        加载多个文件
+        
+        Args:
+            file_paths: 文件路径列表
+            
+        Returns:
+            合并后的数据框
+        """
         try:
             dfs = []
             for file_path in file_paths:
@@ -87,14 +86,26 @@ class DataLoader:
             if dfs:
                 self.data = pd.concat(dfs, ignore_index=True)
                 self._auto_map_fields()
+                self.logger.info(f"Loaded {len(file_paths)} files, total rows: {len(self.data)}")
                 return self.data
-            return None
             
+            raise DataLoadError("没有可加载的文件")
+            
+        except DataLoadError:
+            raise
         except Exception as e:
-            messagebox.showerror('错误', f'批量导入失败: {str(e)}')
-            return None
+            raise DataLoadError(f"批量导入失败: {str(e)}") from e
     
-    def load_folder(self, folder_path: str) -> Optional[pd.DataFrame]:
+    def load_folder(self, folder_path: str) -> pd.DataFrame:
+        """
+        加载文件夹中的所有Excel文件
+        
+        Args:
+            folder_path: 文件夹路径
+            
+        Returns:
+            合并后的数据框
+        """
         try:
             excel_files = []
             for root, dirs, files in os.walk(folder_path):
@@ -103,20 +114,37 @@ class DataLoader:
                         excel_files.append(os.path.join(root, file))
             
             if not excel_files:
-                messagebox.showwarning('警告', '文件夹中没有找到Excel文件')
-                return None
+                raise DataLoadError(f"文件夹中没有找到Excel文件: {folder_path}")
             
+            self.logger.info(f"Found {len(excel_files)} Excel files in folder")
             return self.load_multiple_files(excel_files)
             
+        except DataLoadError:
+            raise
         except Exception as e:
-            messagebox.showerror('错误', f'读取文件夹失败: {str(e)}')
-            return None
+            raise DataLoadError(f"读取文件夹失败: {str(e)}") from e
     
-    def _auto_map_fields(self):
+    def get_sheet_names(self, file_path: str) -> List[str]:
+        """
+        获取Excel文件的工作表名称
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            工作表名称列表
+        """
+        try:
+            xl_file = pd.ExcelFile(file_path)
+            self.sheet_names = xl_file.sheet_names
+            return self.sheet_names
+        except Exception as e:
+            raise DataLoadError(f"读取工作表失败: {str(e)}") from e
+    
+    def _auto_map_fields(self) -> None:
+        """自动映射字段名"""
         if self.data is None:
             return
-        
-        reverse_mapping = {v: k for k, v in self.field_mapping.items()}
         
         new_columns = {}
         for col in self.data.columns:
@@ -128,13 +156,16 @@ class DataLoader:
         
         if new_columns:
             self.data.rename(columns=new_columns, inplace=True)
+            self.logger.debug(f"Auto-mapped fields: {new_columns}")
     
     def get_preview(self, n: int = 10) -> Optional[pd.DataFrame]:
+        """获取数据预览"""
         if self.data is None:
             return None
         return self.data.head(n)
     
     def get_data_info(self) -> Dict:
+        """获取数据信息"""
         if self.data is None:
             return {}
         
@@ -147,6 +178,12 @@ class DataLoader:
         }
     
     def validate_data(self) -> Tuple[bool, List[str]]:
+        """
+        验证数据
+        
+        Returns:
+            (是否有效, 错误列表)
+        """
         if self.data is None:
             return False, ['没有加载数据']
         
@@ -159,24 +196,40 @@ class DataLoader:
             if col in self.data.columns:
                 non_numeric = pd.to_numeric(self.data[col], errors='coerce')
                 null_count = non_numeric.isnull().sum()
-                if null_count > 0:
-                    errors.append(f"字段 '{col}' 存在 {null_count} 个无效数值")
+                original_nulls = self.data[col].isnull().sum()
+                if null_count > original_nulls:
+                    errors.append(f"字段 '{col}' 存在 {null_count - original_nulls} 个无效数值")
         
         if errors:
             return False, errors
         return True, []
     
     def get_field_mapping(self) -> Dict[str, str]:
+        """获取字段映射"""
         return self.field_mapping.copy()
     
-    def apply_field_mapping(self, mapping: Dict[str, str]):
+    def set_field_mapping(self, mapping: Dict[str, str]) -> None:
+        """设置字段映射"""
+        self.field_mapping.update(mapping)
+    
+    def apply_field_mapping(self, mapping: Dict[str, str]) -> None:
+        """应用字段映射到当前数据"""
         if self.data is not None and mapping:
             self.data.rename(columns=mapping, inplace=True)
     
     def export_data(self, output_path: str, format: str = 'excel') -> bool:
+        """
+        导出数据
+        
+        Args:
+            output_path: 输出路径
+            format: 格式 ('excel' 或 'csv')
+            
+        Returns:
+            是否成功
+        """
         if self.data is None:
-            messagebox.showwarning('警告', '没有可导出的数据')
-            return False
+            raise DataValidationError("没有可导出的数据")
         
         try:
             if format == 'excel':
@@ -184,12 +237,10 @@ class DataLoader:
             elif format == 'csv':
                 self.data.to_csv(output_path, index=False, encoding='utf-8-sig')
             else:
-                messagebox.showerror('错误', f'不支持的格式: {format}')
-                return False
+                raise DataValidationError(f"不支持的格式: {format}")
             
-            messagebox.showinfo('成功', f'数据已导出到: {output_path}')
+            self.logger.info(f"Data exported to: {output_path}")
             return True
             
         except Exception as e:
-            messagebox.showerror('错误', f'导出失败: {str(e)}')
-            return False
+            raise DataLoadError(f"导出失败: {str(e)}") from e
